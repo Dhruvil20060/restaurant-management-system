@@ -1,8 +1,79 @@
 import express from 'express';
 import User from '../models/User.js';
+import Order from '../models/Order.js';
 import { protectRoute, authorizeRole } from '../middleware/auth.js';
 
 const router = express.Router();
+
+// Get staff list with workload (Admin)
+router.get('/role/staff', protectRoute, authorizeRole('admin'), async (req, res) => {
+  try {
+    const { onlineOnly } = req.query;
+    const staffFilter = { role: 'staff', isActive: true };
+
+    if (onlineOnly === 'true') {
+      staffFilter.isLoggedIn = true;
+    }
+
+    const staff = await User.find(staffFilter)
+      .select('-password')
+      .sort({ isLoggedIn: -1, staffStatus: 1, staffStatusUpdatedAt: -1, username: 1 });
+
+    const activeAssignments = await Order.aggregate([
+      {
+        $match: {
+          staffAssigned: { $ne: null },
+          status: { $nin: ['Delivered', 'Completed', 'Cancelled'] }
+        }
+      },
+      {
+        $group: {
+          _id: '$staffAssigned',
+          activeOrderCount: { $sum: 1 }
+        }
+      }
+    ]);
+
+    const assignmentMap = new Map(
+      activeAssignments.map((entry) => [String(entry._id), entry.activeOrderCount])
+    );
+
+    const staffWithWorkload = staff.map((member) => ({
+      ...member.toObject(),
+      activeOrderCount: assignmentMap.get(String(member._id)) || 0
+    }));
+
+    res.status(200).json({ staff: staffWithWorkload });
+  } catch (error) {
+    res.status(500).json({ message: error.message });
+  }
+});
+
+// Update own staff status (Staff)
+router.patch('/me/staff-status', protectRoute, authorizeRole('staff'), async (req, res) => {
+  try {
+    const { staffStatus } = req.body;
+    const validStatuses = ['Available', 'Busy', 'Offline'];
+
+    if (!validStatuses.includes(staffStatus)) {
+      return res.status(400).json({ message: 'Invalid staff status' });
+    }
+
+    const user = await User.findByIdAndUpdate(
+      req.userId,
+      { staffStatus, staffStatusUpdatedAt: new Date(), isLoggedIn: true },
+      { new: true, runValidators: true }
+    ).select('-password');
+
+    if (!user) {
+      return res.status(404).json({ message: 'User not found' });
+    }
+
+    res.status(200).json({ message: 'Staff status updated', user });
+  } catch (error) {
+    res.status(500).json({ message: error.message });
+  }
+});
 
 // Get all users (Admin only)
 router.get('/', protectRoute, authorizeRole('admin'), async (req, res) => {
@@ -127,16 +198,6 @@ router.patch('/:id/activate', protectRoute, authorizeRole('admin'), async (req, 
     }
 
     res.status(200).json({ message: 'User activated successfully', user });
-  } catch (error) {
-    res.status(500).json({ message: error.message });
-  }
-});
-
-// Get staff list (Admin)
-router.get('/role/staff', protectRoute, authorizeRole('admin'), async (req, res) => {
-  try {
-    const staff = await User.find({ role: 'staff', isActive: true }).select('-password');
-    res.status(200).json({ staff });
   } catch (error) {
     res.status(500).json({ message: error.message });
   }

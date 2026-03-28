@@ -1,10 +1,28 @@
-import { useContext } from "react";
+import { useContext, useEffect, useState } from "react";
 import { useNavigate } from "react-router-dom";
 import { OrderContext } from "../../App";
+import api from "../../services/api";
 
 function StaffDashboard() {
   const navigate = useNavigate();
   const { orders, setOrders, menuItems, setMenuItems } = useContext(OrderContext);
+  const [staffStatus, setStaffStatus] = useState("Available");
+  const [updatingStatus, setUpdatingStatus] = useState(false);
+
+  useEffect(() => {
+    const loadStaffStatus = async () => {
+      try {
+        const response = await api.getCurrentUser();
+        if (response?.user?.staffStatus) {
+          setStaffStatus(response.user.staffStatus);
+        }
+      } catch (error) {
+        console.error("Failed to load staff status:", error);
+      }
+    };
+
+    loadStaffStatus();
+  }, []);
 
   const updateStatus = (id) => {
     const updatedOrders = orders.map((order) => {
@@ -36,9 +54,31 @@ function StaffDashboard() {
 
   const handleEndShift = () => {
     if (window.confirm("Are you sure you want to end your shift?")) {
-      localStorage.removeItem("role");
-      localStorage.removeItem("username");
-      navigate("/");
+      (async () => {
+        try {
+          await api.logout();
+        } catch (error) {
+          console.error("Logout request failed:", error);
+        } finally {
+          localStorage.removeItem("token");
+          localStorage.removeItem("role");
+          localStorage.removeItem("username");
+          localStorage.removeItem("userId");
+          navigate("/");
+        }
+      })();
+    }
+  };
+
+  const updateMyStatus = async (nextStatus) => {
+    setUpdatingStatus(true);
+    try {
+      await api.updateMyStaffStatus(nextStatus);
+      setStaffStatus(nextStatus);
+    } catch (error) {
+      alert(error.message || "Failed to update staff status");
+    } finally {
+      setUpdatingStatus(false);
     }
   };
 
@@ -129,6 +169,31 @@ function StaffDashboard() {
             </div>
           </div>
         ))}
+      </div>
+
+      <div className="card-shadow p-6">
+        <div className="flex flex-col md:flex-row md:items-center md:justify-between gap-4">
+          <div>
+            <h3 className="text-lg font-semibold text-gray-900">My Availability Status</h3>
+            <p className="text-sm text-gray-500">Admin uses this status to assign incoming customer orders.</p>
+          </div>
+          <div className="flex items-center gap-2">
+            {["Available", "Busy", "Offline"].map((status) => (
+              <button
+                key={status}
+                onClick={() => updateMyStatus(status)}
+                disabled={updatingStatus}
+                className={`px-4 py-2 rounded-md text-sm font-medium border transition-colors ${
+                  staffStatus === status
+                    ? "bg-green-600 text-white border-green-600"
+                    : "bg-white text-gray-700 border-gray-300 hover:bg-gray-50"
+                } disabled:opacity-70`}
+              >
+                {status}
+              </button>
+            ))}
+          </div>
+        </div>
       </div>
 
       {/* Performance & Tasks */}
@@ -259,28 +324,28 @@ function StaffDashboard() {
         <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
           <button
             onClick={handleViewOrders}
-            className="flex items-center justify-center px-4 py-3 bg-gradient-to-r from-green-500 to-green-600 text-white rounded-lg hover:from-green-600 hover:to-green-700 transition-all transform hover:scale-105"
+            className="flex items-center justify-center px-4 py-3 bg-linear-to-r from-green-500 to-green-600 text-white rounded-lg hover:from-green-600 hover:to-green-700 transition-all transform hover:scale-105"
           >
             <span className="mr-2">📋</span>
             View Orders
           </button>
           <button
             onClick={handleCleanStation}
-            className="flex items-center justify-center px-4 py-3 bg-gradient-to-r from-blue-500 to-blue-600 text-white rounded-lg hover:from-blue-600 hover:to-blue-700 transition-all transform hover:scale-105"
+            className="flex items-center justify-center px-4 py-3 bg-linear-to-r from-blue-500 to-blue-600 text-white rounded-lg hover:from-blue-600 hover:to-blue-700 transition-all transform hover:scale-105"
           >
             <span className="mr-2">🧹</span>
             Clean Station
           </button>
           <button
             onClick={handleCallSupport}
-            className="flex items-center justify-center px-4 py-3 bg-gradient-to-r from-purple-500 to-purple-600 text-white rounded-lg hover:from-purple-600 hover:to-purple-700 transition-all transform hover:scale-105"
+            className="flex items-center justify-center px-4 py-3 bg-linear-to-r from-purple-500 to-purple-600 text-white rounded-lg hover:from-purple-600 hover:to-purple-700 transition-all transform hover:scale-105"
           >
             <span className="mr-2">📞</span>
             Call Support
           </button>
           <button
             onClick={handleEndShift}
-            className="flex items-center justify-center px-4 py-3 bg-gradient-to-r from-orange-500 to-orange-600 text-white rounded-lg hover:from-orange-600 hover:to-orange-700 transition-all transform hover:scale-105"
+            className="flex items-center justify-center px-4 py-3 bg-linear-to-r from-orange-500 to-orange-600 text-white rounded-lg hover:from-orange-600 hover:to-orange-700 transition-all transform hover:scale-105"
           >
             <span className="mr-2">⏰</span>
             End Shift

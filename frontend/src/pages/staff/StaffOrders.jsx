@@ -1,158 +1,189 @@
-import { useContext } from "react";
-import { OrderContext } from "../../App";
+import { useEffect, useMemo, useState } from "react";
+import api from "../../services/api";
 
 function StaffOrders() {
-const { orders, setOrders, menuItems, setMenuItems } = useContext(OrderContext);
+  const [orders, setOrders] = useState([]);
+  const [loading, setLoading] = useState(true);
+  const [updatingOrderId, setUpdatingOrderId] = useState(null);
+  const [notifyingOrderId, setNotifyingOrderId] = useState(null);
 
-  const pageStyle = {
-    minHeight: "100vh",
-    padding: "28px 18px",
-    background:
-      "radial-gradient(circle at top right, #d8f3dc 0%, #f7fff9 45%, #ffffff 100%)",
-  };
-
-  const headerStyle = {
-    maxWidth: "980px",
-    margin: "0 auto 20px",
-    background: "linear-gradient(135deg, #1b4332 0%, #2d6a4f 100%)",
-    color: "#ffffff",
-    borderRadius: "16px",
-    padding: "20px",
-    boxShadow: "0 12px 30px rgba(27, 67, 50, 0.25)",
-  };
-
-  const listStyle = {
-    maxWidth: "980px",
-    margin: "0 auto",
-    display: "grid",
-    gap: "14px",
-  };
-
-  const cardStyle = {
-    background: "#ffffff",
-    borderRadius: "14px",
-    padding: "16px",
-    border: "1px solid #d8f3dc",
-    boxShadow: "0 8px 24px rgba(0, 0, 0, 0.06)",
-    display: "flex",
-    justifyContent: "space-between",
-    alignItems: "center",
-    flexWrap: "wrap",
-    gap: "12px",
-  };
-
-  const getStatusStyle = (status) => {
-    if (status === "Pending") {
-      return {
-        background: "#fff3cd",
-        color: "#8a6d1d",
-        border: "1px solid #ffe69c",
-      };
+  const loadOrders = async () => {
+    try {
+      const response = await api.getOrders();
+      setOrders(response.orders || []);
+    } catch (error) {
+      console.error("Failed to load staff orders:", error);
+    } finally {
+      setLoading(false);
     }
-    if (status === "Preparing") {
-      return {
-        background: "#d1ecf1",
-        color: "#0c5460",
-        border: "1px solid #b8daff",
-      };
-    }
-    return {
-      background: "#d4edda",
-      color: "#155724",
-      border: "1px solid #c3e6cb",
-    };
   };
 
-  const updateStatus = (id) => {
-    const updatedOrders = orders.map((order) => {
-      if (order.id === id) {
-        if (order.status === "Pending")
-          return { ...order, status: "Preparing" };
-        if (order.status === "Preparing")
-          return { ...order, status: "Completed" };
-      }
-      return order;
-    });
+  useEffect(() => {
+    loadOrders();
 
-    setOrders(updatedOrders);
+    const intervalId = setInterval(() => {
+      loadOrders();
+    }, 5000);
+
+    return () => clearInterval(intervalId);
+  }, []);
+
+  const assignedOrders = useMemo(
+    () =>
+      orders
+        .filter((order) => !["Delivered", "Cancelled"].includes(order.status))
+        .sort((a, b) => new Date(b.createdAt || 0) - new Date(a.createdAt || 0)),
+    [orders]
+  );
+
+  const updateOrderStatus = async (orderId, status) => {
+    setUpdatingOrderId(orderId);
+    try {
+      const response = await api.updateOrderStatus(orderId, status);
+      const updatedOrder = response.order;
+
+      setOrders((prev) =>
+        prev.map((order) => ((order._id || order.id) === orderId ? { ...order, ...updatedOrder } : order))
+      );
+    } catch (error) {
+      alert(error.message || "Failed to update order status");
+    } finally {
+      setUpdatingOrderId(null);
+    }
+  };
+
+  const notifyAdmin = async (orderId) => {
+    setNotifyingOrderId(orderId);
+    try {
+      const response = await api.notifyAdminOrderReady(orderId);
+      const updatedOrder = response.order;
+
+      setOrders((prev) =>
+        prev.map((order) => ((order._id || order.id) === orderId ? { ...order, ...updatedOrder } : order))
+      );
+      alert("Admin notified successfully. Admin can now complete the order.");
+    } catch (error) {
+      alert(error.message || "Failed to notify admin");
+    } finally {
+      setNotifyingOrderId(null);
+    }
+  };
+
+  const getStatusClass = (status) => {
+    switch (status) {
+      case "Confirmed":
+        return "bg-blue-100 text-blue-800";
+      case "Preparing":
+        return "bg-yellow-100 text-yellow-800";
+      case "Ready":
+        return "bg-emerald-100 text-emerald-800";
+      default:
+        return "bg-gray-100 text-gray-800";
+    }
   };
 
   return (
-    <div style={pageStyle}>
-      <div style={headerStyle}>
-        <h1 style={{ margin: 0, fontSize: "1.8rem", fontWeight: 700 }}>
-          Staff Orders Panel
-        </h1>
-        <p style={{ margin: "8px 0 0", opacity: 0.9 }}>
-          Track live orders and update preparation progress quickly.
+    <div className="space-y-6">
+      <div className="card-shadow p-6 bg-linear-to-r from-emerald-700 to-green-700 text-white">
+        <h1 className="text-2xl font-bold">Staff Orders Panel</h1>
+        <p className="text-sm text-emerald-100 mt-1">
+          Handle your assigned orders and notify admin once an order is ready.
         </p>
       </div>
 
-      <div style={listStyle}>
-        {orders.length === 0 && (
-          <div style={cardStyle}>
-            <p style={{ margin: 0, color: "#555" }}>No orders available right now.</p>
-          </div>
-        )}
+      {loading ? (
+        <div className="card-shadow p-6 text-gray-600">Loading assigned orders...</div>
+      ) : assignedOrders.length === 0 ? (
+        <div className="card-shadow p-6 text-gray-600">No assigned orders right now.</div>
+      ) : (
+        <div className="grid gap-4">
+          {assignedOrders.map((order) => {
+            const orderId = order._id || order.id;
+            const total = Number(order.totalAmount || order.total || 0);
+            const customer = order.customerId?.username || order.customer || "Guest";
 
-        {orders.map((order) => (
-          <div key={order.id} style={cardStyle}>
-            <div>
-              <h3 style={{ margin: "0 0 8px", color: "#1b4332" }}>
-                Order #{order.id}
-              </h3>
-              <p style={{ margin: 0, color: "#4f4f4f" }}>
-                Customer: <strong>{order.customer}</strong>
-              </p>
-              <p style={{ margin: "8px 0 4px", color: "#1f1f1f", fontWeight: 600 }}>
-                Items:
-              </p>
-              <ul style={{ margin: "0 0 0 18px", padding: 0, color: "#4f4f4f" }}>
-                {order.items?.length ? (
-                  order.items.map((item, index) => (
-                    <li key={index} style={{ marginBottom: "4px" }}>
-                      {item.name || item.itemName || "Item"}
-                      {item.quantity ? ` x${item.quantity}` : ""}
-                    </li>
-                  ))
-                ) : (
-                  <li>No item details</li>
-                )}
-              </ul>
-            </div>
+            return (
+              <div key={orderId} className="card-shadow p-5">
+                <div className="flex flex-col md:flex-row md:items-center md:justify-between gap-3">
+                  <div>
+                    <p className="font-semibold text-gray-900">Order #{order.orderNumber || orderId}</p>
+                    <p className="text-sm text-gray-600">Customer: {customer}</p>
+                    <p className="text-sm text-gray-600">Amount: ₹{total.toLocaleString()}</p>
+                  </div>
 
-            <div style={{ display: "flex", alignItems: "center", gap: "10px" }}>
-              <span
-                style={{
-                  ...getStatusStyle(order.status),
-                  padding: "6px 12px",
-                  borderRadius: "999px",
-                  fontWeight: 600,
-                  fontSize: "0.9rem",
-                }}
-              >
-                {order.status}
-              </span>
+                  <div className="flex flex-wrap items-center gap-2">
+                    <span className={`inline-flex px-2.5 py-1 rounded-full text-xs font-semibold ${getStatusClass(order.status)}`}>
+                      {order.status}
+                    </span>
 
-              {order.status !== "Completed" && (
-                <button
-                  onClick={() => updateStatus(order.id)}
-                  style={{
-                    border: "none",
-                    background: "#2d6a4f",
-                    color: "#fff",
-                    padding: "8px 14px",
-                    borderRadius: "8px",
-                    fontWeight: 600,
-                    cursor: "pointer",
-                  }}
-                >
-                  Update Status
-                </button>
-              )}
-            </div>
-          </div>
-        ))}
+                    {order.staffNotifiedAdmin ? (
+                      <span className="inline-flex px-2.5 py-1 rounded-full text-xs font-semibold bg-indigo-100 text-indigo-800">
+                        Admin Notified
+                      </span>
+                    ) : (
+                      <span className="inline-flex px-2.5 py-1 rounded-full text-xs font-semibold bg-gray-100 text-gray-700">
+                        Not Notified
+                      </span>
+                    )}
+                  </div>
+                </div>
+
+                <div className="mt-4 border-t border-gray-200 pt-4">
+                  <p className="text-sm font-medium text-gray-700 mb-2">Items</p>
+                  <ul className="space-y-1 text-sm text-gray-600">
+                    {(order.items || []).map((item, index) => (
+                      <li key={index}>
+                        {item.name || "Item"} x{item.quantity || 1}
+                      </li>
+                    ))}
+                  </ul>
+                </div>
+
+                <div className="mt-4 flex flex-wrap gap-2">
+                  {order.status === "Confirmed" && (
+                    <button
+                      onClick={() => updateOrderStatus(orderId, "Preparing")}
+                      disabled={updatingOrderId === orderId}
+                      className="inline-flex items-center px-3 py-1.5 rounded-md text-sm font-medium text-white bg-amber-600 hover:bg-amber-700 disabled:opacity-70"
+                    >
+                      {updatingOrderId === orderId ? "Updating..." : "Start Preparing"}
+                    </button>
+                  )}
+
+                  {order.status === "Preparing" && (
+                    <button
+                      onClick={() => updateOrderStatus(orderId, "Ready")}
+                      disabled={updatingOrderId === orderId}
+                      className="inline-flex items-center px-3 py-1.5 rounded-md text-sm font-medium text-white bg-emerald-600 hover:bg-emerald-700 disabled:opacity-70"
+                    >
+                      {updatingOrderId === orderId ? "Updating..." : "Mark Ready"}
+                    </button>
+                  )}
+
+                  {["Preparing", "Ready"].includes(order.status) && !order.staffNotifiedAdmin && (
+                    <button
+                      onClick={() => notifyAdmin(orderId)}
+                      disabled={notifyingOrderId === orderId}
+                      className="inline-flex items-center px-3 py-1.5 rounded-md text-sm font-medium text-white bg-indigo-600 hover:bg-indigo-700 disabled:opacity-70"
+                    >
+                      {notifyingOrderId === orderId ? "Notifying..." : "Notify Admin"}
+                    </button>
+                  )}
+                </div>
+              </div>
+            );
+          })}
+        </div>
+      )}
+
+      <div className="flex justify-end">
+        <button
+          type="button"
+          onClick={loadOrders}
+          className="inline-flex items-center px-3 py-1.5 rounded-md text-sm font-medium border border-gray-300 text-gray-700 bg-white hover:bg-gray-50"
+        >
+          Refresh Orders
+        </button>
       </div>
     </div>
   );

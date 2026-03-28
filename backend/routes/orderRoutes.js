@@ -1,6 +1,7 @@
 import express from 'express';
 import mongoose from 'mongoose';
 import Order from '../models/Order.js';
+import User from '../models/User.js';
 import { protectRoute, authorizeRole } from '../middleware/auth.js';
 
 const router = express.Router();
@@ -80,6 +81,10 @@ router.get('/', protectRoute, authorizeRole('admin', 'staff'), async (req, res) 
     const { status, orderType, dateFrom, dateTo } = req.query;
     let filter = {};
 
+    if (req.role === 'staff') {
+      filter.staffAssigned = req.userId;
+    }
+
     if (status) filter.status = status;
     if (orderType) filter.orderType = orderType;
 
@@ -92,7 +97,7 @@ router.get('/', protectRoute, authorizeRole('admin', 'staff'), async (req, res) 
     const orders = await Order.find(filter)
       .sort({ createdAt: -1 })
       .populate('customerId', 'username email phone')
-      .populate('staffAssigned', 'username firstName lastName');
+      .populate('staffAssigned', 'username firstName lastName staffStatus isLoggedIn');
 
     res.status(200).json({ orders });
   } catch (error) {
@@ -159,17 +164,75 @@ router.patch('/:id/status', protectRoute, authorizeRole('admin', 'staff'), async
   }
 
   try {
-    const order = await Order.findByIdAndUpdate(
-      req.params.id,
-      { status, staffAssigned: req.userId },
-      { new: true }
-    );
+    const order = await Order.findById(req.params.id);
 
     if (!order) {
       return res.status(404).json({ message: 'Order not found' });
     }
 
+    if (req.role === 'admin') {
+      if (status === 'Confirmed' && !order.staffAssigned) {
+        return res.status(400).json({ message: 'Assign staff before accepting the order' });
+      }
+
+      if (status === 'Delivered' && !order.staffNotifiedAdmin) {
+        return res.status(400).json({ message: 'Staff must notify admin before completing the order' });
+      }
+    }
+
+    if (req.role === 'staff') {
+      if (!order.staffAssigned || String(order.staffAssigned) !== req.userId) {
+        return res.status(403).json({ message: 'Only assigned staff can update this order' });
+      }
+
+      if (status === 'Confirmed' || status === 'Delivered') {
+        return res.status(403).json({ message: 'Staff cannot set this status' });
+      }
+    }
+
+    order.status = status;
+
+    // Once admin completes order, reset notify flag.
+    if (status === 'Delivered') {
+      order.staffNotifiedAdmin = false;
+      order.staffNotifiedAt = null;
+    }
+
+    await order.save();
+
     res.status(200).json({ message: 'Order status updated', order });
+  } catch (error) {
+    res.status(500).json({ message: error.message });
+  }
+});
+
+// Staff notify admin that assigned order is ready
+router.patch('/:id/notify-admin', protectRoute, authorizeRole('staff'), async (req, res) => {
+  try {
+    const order = await Order.findById(req.params.id);
+
+    if (!order) {
+      return res.status(404).json({ message: 'Order not found' });
+    }
+
+    if (!order.staffAssigned || String(order.staffAssigned) !== req.userId) {
+      return res.status(403).json({ message: 'Only assigned staff can notify admin' });
+    }
+
+    if (!['Preparing', 'Ready'].includes(order.status)) {
+      return res.status(400).json({ message: 'Order must be preparing or ready before notifying admin' });
+    }
+
+    order.status = 'Ready';
+    order.staffNotifiedAdmin = true;
+    order.staffNotifiedAt = new Date();
+    await order.save();
+
+    const populatedOrder = await Order.findById(order._id)
+      .populate('customerId', 'username email phone')
+      .populate('staffAssigned', 'username firstName lastName staffStatus isLoggedIn');
+
+    res.status(200).json({ message: 'Admin has been notified by staff', order: populatedOrder });
   } catch (error) {
     res.status(500).json({ message: error.message });
   }
@@ -237,11 +300,22 @@ router.patch('/:id/assign-staff', protectRoute, authorizeRole('admin'), async (r
   const { staffId } = req.body;
 
   try {
+    if (!mongoose.Types.ObjectId.isValid(staffId)) {
+      return res.status(400).json({ message: 'Invalid staff ID' });
+    }
+
+    const staffMember = await User.findOne({ _id: staffId, role: 'staff', isActive: true });
+    if (!staffMember) {
+      return res.status(404).json({ message: 'Active staff member not found' });
+    }
+
     const order = await Order.findByIdAndUpdate(
       req.params.id,
-      { staffAssigned: staffId },
+      { staffAssigned: staffId, staffNotifiedAdmin: false, staffNotifiedAt: null },
       { new: true }
-    ).populate('staffAssigned', 'username firstName lastName');
+    )
+      .populate('customerId', 'username email phone')
+      .populate('staffAssigned', 'username firstName lastName staffStatus isLoggedIn');
 
     if (!order) {
       return res.status(404).json({ message: 'Order not found' });
@@ -263,7 +337,7 @@ router.patch('/:id/cancel', protectRoute, async (req, res) => {
     }
 
     // Check permission
-    if (String(order.customerId) !== req.userId && !['admin', 'staff'].includes(req.role)) {
+    if (String(order.customerId) !== req.userId && req.role !== 'admin') {
       return res.status(403).json({ message: 'Access denied' });
     }
 

@@ -65,6 +65,11 @@ const orderSchema = new mongoose.Schema(
       type: mongoose.Schema.Types.ObjectId,
       ref: 'User'
     },
+    staffNotifiedAdmin: {
+      type: Boolean,
+      default: false
+    },
+    staffNotifiedAt: Date,
     notes: String,
     discount: {
       type: Number,

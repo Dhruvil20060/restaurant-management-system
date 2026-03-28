@@ -87,6 +87,12 @@ router.post('/login', async (req, res) => {
       return res.status(403).json({ message: 'Invalid role for this user' });
     }
 
+    if (user.role === 'staff') {
+      user.isLoggedIn = true;
+      user.lastLoginAt = new Date();
+      await user.save();
+    }
+
     const token = generateToken(user._id, user.role);
 
     res.status(200).json({
@@ -116,9 +122,14 @@ router.get('/me', protectRoute, async (req, res) => {
   }
 });
 
-// Logout (client-side responsibility to remove token)
-router.post('/logout', (req, res) => {
-  res.status(200).json({ message: 'Logged out successfully' });
+// Logout
+router.post('/logout', protectRoute, async (req, res) => {
+  try {
+    await User.findByIdAndUpdate(req.userId, { isLoggedIn: false });
+    res.status(200).json({ message: 'Logged out successfully' });
+  } catch (error) {
+    res.status(500).json({ message: error.message });
+  }
 });
 
 export default router;

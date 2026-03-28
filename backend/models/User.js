@@ -35,6 +35,22 @@ const userSchema = new mongoose.Schema(
     isActive: {
       type: Boolean,
       default: true
+    },
+    staffStatus: {
+      type: String,
+      enum: ['Available', 'Busy', 'Offline'],
+      default: 'Available'
+    },
+    staffStatusUpdatedAt: {
+      type: Date,
+      default: Date.now
+    },
+    isLoggedIn: {
+      type: Boolean,
+      default: false
+    },
+    lastLoginAt: {
+      type: Date
     }
   },
   { timestamps: true }

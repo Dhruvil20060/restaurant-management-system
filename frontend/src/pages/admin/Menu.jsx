@@ -1,6 +1,14 @@
 import { useContext, useState } from "react";
 import { OrderContext } from "../../App";
 
+const resolveImage = (item) => {
+  if (item.image && item.image.trim()) {
+    return item.image;
+  }
+
+  return `https://source.unsplash.com/300x220/?${encodeURIComponent(item.category || "food")}`;
+};
+
 function Menu() {
   const { orders, setOrders, menuItems, setMenuItems } = useContext(OrderContext);
   const [editingId, setEditingId] = useState(null);
@@ -171,6 +179,7 @@ const deleteItem = (id) => {
         <thead>
           <tr style={{ background: "#f0f0f0" }}>
             <th style={cellStyle}>ID</th>
+            <th style={cellStyle}>Image</th>
             <th style={cellStyle}>Name</th>
             <th style={cellStyle}>Description</th>
             <th style={cellStyle}>Category</th>
@@ -184,6 +193,27 @@ const deleteItem = (id) => {
           {menuItems.map((item) => (
   <tr key={item.id}>
     <td style={cellStyle}>{item.id}</td>
+
+    <td style={cellStyle}>
+      {editingId === item.id ? (
+        <input
+          value={editedItem.image}
+          placeholder="Image URL"
+          onChange={(e) =>
+            setEditedItem({ ...editedItem, image: e.target.value })
+          }
+        />
+      ) : (
+        <img
+          src={resolveImage(item)}
+          alt={item.name}
+          style={{ width: "68px", height: "48px", objectFit: "cover", borderRadius: "6px", margin: "0 auto" }}
+          onError={(e) => {
+            e.currentTarget.src = `https://source.unsplash.com/300x220/?${encodeURIComponent(item.name || "food")}`;
+          }}
+        />
+      )}
+    </td>
 
     <td style={cellStyle}>
       {editingId === item.id ? (

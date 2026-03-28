@@ -1,19 +1,56 @@
-import { useContext, useMemo, useState } from "react";
+import { useContext, useEffect, useMemo, useState } from "react";
 import { OrderContext } from "../../App";
+import api from "../../services/api";
 
 function CustomerProfile() {
   const { orders } = useContext(OrderContext);
 
-  const username = localStorage.getItem("username") || "Customer";
-  const [fullName, setFullName] = useState(localStorage.getItem("customerFullName") || username);
-  const [email, setEmail] = useState(localStorage.getItem("customerEmail") || "");
-  const [phone, setPhone] = useState(localStorage.getItem("customerPhone") || "");
-  const [address, setAddress] = useState(localStorage.getItem("customerAddress") || "");
+  const [loading, setLoading] = useState(true);
+  const [user, setUser] = useState(null);
+  const [fullName, setFullName] = useState("");
+  const [email, setEmail] = useState("");
+  const [phone, setPhone] = useState("");
+  const [address, setAddress] = useState("");
   const [saved, setSaved] = useState(false);
 
+  useEffect(() => {
+    const loadProfile = async () => {
+      try {
+        const response = await api.getCurrentUser();
+        const currentUser = response.user;
+        const resolvedName = [currentUser.firstName, currentUser.lastName]
+          .filter(Boolean)
+          .join(" ")
+          .trim() || currentUser.username || "Customer";
+
+        setUser(currentUser);
+        setFullName(resolvedName);
+        setEmail(currentUser.email || "");
+        setPhone(currentUser.phone || "");
+        setAddress(currentUser.address || "");
+      } catch (error) {
+        console.error("Failed to load customer profile:", error);
+      } finally {
+        setLoading(false);
+      }
+    };
+
+    loadProfile();
+  }, []);
+
+  const username = user?.username || localStorage.getItem("username") || "Customer";
+  const currentUserId = user?._id || localStorage.getItem("userId");
+
   const myOrders = useMemo(
-    () => orders.filter((order) => order.customer === username),
-    [orders, username]
+    () =>
+      orders.filter((order) => {
+        if (order.customer === username) return true;
+        if (order.customerId?.username === username) return true;
+        if (order.customerId?._id === currentUserId) return true;
+        if (order.customerId === currentUserId) return true;
+        return false;
+      }),
+    [orders, username, currentUserId]
   );
 
   const totalSpent = myOrders.reduce((sum, order) => sum + (order.totalAmount || 0), 0);
@@ -26,13 +63,37 @@ function CustomerProfile() {
 
   const handleSave = (e) => {
     e.preventDefault();
-    localStorage.setItem("customerFullName", fullName.trim());
-    localStorage.setItem("customerEmail", email.trim());
-    localStorage.setItem("customerPhone", phone.trim());
-    localStorage.setItem("customerAddress", address.trim());
-    setSaved(true);
-    setTimeout(() => setSaved(false), 1800);
+
+    const nameParts = fullName.trim().split(/\s+/).filter(Boolean);
+    const firstName = nameParts[0] || "";
+    const lastName = nameParts.slice(1).join(" ");
+
+    (async () => {
+      try {
+        const response = await api.updateUser(currentUserId, {
+          firstName,
+          lastName,
+          email: email.trim(),
+          phone: phone.trim(),
+          address: address.trim(),
+        });
+
+        setUser(response.user || user);
+        setSaved(true);
+        setTimeout(() => setSaved(false), 1800);
+      } catch (error) {
+        alert(error.message || "Failed to save profile");
+      }
+    })();
   };
+
+  if (loading) {
+    return (
+      <div className="card-shadow p-6">
+        <p className="text-gray-600">Loading profile...</p>
+      </div>
+    );
+  }
 
   return (
     <div className="space-y-6">
@@ -44,7 +105,7 @@ function CustomerProfile() {
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
         <div className="bg-white rounded-xl shadow-sm border border-gray-200 p-6 lg:col-span-1">
           <div className="flex items-center gap-4">
-            <div className="h-16 w-16 rounded-full bg-gradient-to-r from-orange-500 to-red-500 text-white flex items-center justify-center text-2xl font-bold">
+            <div className="h-16 w-16 rounded-full bg-linear-to-r from-orange-500 to-red-500 text-white flex items-center justify-center text-2xl font-bold">
               {fullName?.charAt(0).toUpperCase() || "C"}
             </div>
             <div>

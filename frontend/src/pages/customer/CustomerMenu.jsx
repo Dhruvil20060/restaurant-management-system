@@ -2,6 +2,14 @@ import { useState, useContext, useEffect } from "react";
 import { OrderContext } from "../../App";
 import api from "../../services/api";
 
+const getItemImage = (item) => {
+  if (item.image && item.image.trim()) {
+    return item.image;
+  }
+
+  return `https://source.unsplash.com/900x700/?${encodeURIComponent(item.category || "food")}`;
+};
+
 function CustomerMenu() {
   const { menuItems, setMenuItems, orders, setOrders } = useContext(OrderContext);
   const [selectedCategory, setSelectedCategory] = useState("All");
@@ -168,9 +176,15 @@ function CustomerMenu() {
         {filteredItems.map((item) => (
           <div key={item.id} className="bg-white rounded-lg shadow-sm border border-gray-200 overflow-hidden hover:shadow-md transition-shadow">
             <div className="aspect-w-16 aspect-h-9 bg-gray-200">
-              <div className="w-full h-48 bg-linear-to-br from-orange-100 to-red-100 flex items-center justify-center">
-                <span className="text-4xl">{item.emoji}</span>
-              </div>
+              <img
+                src={getItemImage(item)}
+                alt={item.name}
+                className="w-full h-48 object-cover"
+                loading="lazy"
+                onError={(e) => {
+                  e.currentTarget.src = `https://source.unsplash.com/900x700/?${encodeURIComponent(item.name || "food")}`;
+                }}
+              />
             </div>
             <div className="p-6">
               <div className="flex justify-between items-start mb-2">

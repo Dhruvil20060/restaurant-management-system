@@ -45,7 +45,7 @@ router.get('/:id', async (req, res) => {
 
 // Create menu item (Admin only)
 router.post('/', protectRoute, authorizeRole('admin'), async (req, res) => {
-  const { name, description, price, category, emoji, preparationTime, isVegetarian, spicyLevel } = req.body;
+  const { name, description, price, category, emoji, image, preparationTime, isVegetarian, spicyLevel } = req.body;
 
   if (!name || !description || !price || !category) {
     return res.status(400).json({ message: 'Please provide all required fields' });
@@ -58,6 +58,7 @@ router.post('/', protectRoute, authorizeRole('admin'), async (req, res) => {
       price,
       category,
       emoji,
+      image,
       preparationTime,
       isVegetarian: isVegetarian !== undefined ? isVegetarian : true,
       spicyLevel: spicyLevel || 1

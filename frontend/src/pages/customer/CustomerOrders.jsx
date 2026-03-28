@@ -7,6 +7,7 @@ function CustomerOrders() {
   const currentUsername = localStorage.getItem("username");
   const currentUserId = localStorage.getItem("userId");
   const [payingOrderId, setPayingOrderId] = useState(null);
+  const [cancellingOrderId, setCancellingOrderId] = useState(null);
 
   useEffect(() => {
     const loadMyOrders = async () => {
@@ -91,6 +92,40 @@ function CustomerOrders() {
     }
   };
 
+  const cancelOrder = async (order) => {
+    const orderId = order._id || order.id;
+    if (!orderId) return;
+
+    const canCancel = ["Pending", "Confirmed", "Preparing"].includes(order.status);
+    if (!canCancel) {
+      alert("This order can no longer be cancelled");
+      return;
+    }
+
+    const confirmed = window.confirm("Are you sure you want to cancel this order?");
+    if (!confirmed) return;
+
+    setCancellingOrderId(orderId);
+    try {
+      const response = await api.cancelOrder(orderId);
+      const updatedOrder = response.order;
+
+      setOrders((prevOrders) =>
+        prevOrders.map((currentOrder) => {
+          const currentId = currentOrder._id || currentOrder.id;
+          if (currentId === orderId) {
+            return { ...currentOrder, ...updatedOrder };
+          }
+          return currentOrder;
+        })
+      );
+    } catch (error) {
+      alert(error.message || "Failed to cancel order");
+    } finally {
+      setCancellingOrderId(null);
+    }
+  };
+
   return (
     <div className="space-y-6">
       <div>
@@ -162,17 +197,30 @@ function CustomerOrders() {
               </div>
 
               <div className="px-6 py-4 bg-gray-50 border-t border-gray-200">
-                <div className="flex justify-between items-center">
+                <div className="flex justify-between items-center gap-3">
                   <div className="text-sm text-gray-600">
                     Total Items: {(order.items || []).reduce((sum, item) => sum + (item.quantity || 0), 0)}
                     {order.orderType ? ` | ${order.orderType}` : ""}
                     {order.tableNumber ? ` | Table ${order.tableNumber}` : ""}
                   </div>
-                  {order.status === "Ready" && (
-                    <button className="inline-flex items-center px-4 py-2 border border-transparent text-sm font-medium rounded-md text-white bg-green-600 hover:bg-green-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-green-500">
-                      Mark as Picked Up
-                    </button>
-                  )}
+                  <div className="flex items-center gap-2">
+                    {["Pending", "Confirmed", "Preparing"].includes(order.status) && (
+                      <button
+                        type="button"
+                        onClick={() => cancelOrder(order)}
+                        disabled={cancellingOrderId === (order._id || order.id)}
+                        className="inline-flex items-center px-4 py-2 border border-red-200 text-sm font-medium rounded-md text-red-700 bg-red-50 hover:bg-red-100 disabled:opacity-70"
+                      >
+                        {cancellingOrderId === (order._id || order.id) ? "Cancelling..." : "Cancel Order"}
+                      </button>
+                    )}
+
+                    {order.status === "Ready" && (
+                      <button className="inline-flex items-center px-4 py-2 border border-transparent text-sm font-medium rounded-md text-white bg-green-600 hover:bg-green-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-green-500">
+                        Mark as Picked Up
+                      </button>
+                    )}
+                  </div>
                 </div>
 
                 {order.status === "Delivered" && order.paymentStatus !== "Paid" && (

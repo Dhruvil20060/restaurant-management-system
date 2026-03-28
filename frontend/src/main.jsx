@@ -24,6 +24,7 @@ import Billing from "./pages/admin/Billing";
 
 import StaffDashboard from "./pages/staff/StaffDashboard";
 import StaffOrders from "./pages/staff/StaffOrders";
+import StaffProfile from "./pages/staff/StaffProfile";
 
 import CustomerMenu from "./pages/customer/CustomerMenu";
 import CustomerOrders from "./pages/customer/CustomerOrders";
@@ -63,6 +64,7 @@ const router = createBrowserRouter(
       >
         <Route path="dashboard" element={<StaffDashboard />} />
         <Route path="orders" element={<StaffOrders />} />
+        <Route path="profile" element={<StaffProfile />} />
       </Route>
 
       <Route

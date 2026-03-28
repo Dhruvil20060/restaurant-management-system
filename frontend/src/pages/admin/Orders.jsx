@@ -6,21 +6,90 @@ function Orders() {
   const { orders, setOrders } = useContext(OrderContext);
   const [filter, setFilter] = useState("all");
   const [searchTerm, setSearchTerm] = useState("");
+  const [cancellingOrderId, setCancellingOrderId] = useState(null);
+  const [staffMembers, setStaffMembers] = useState([]);
+  const [selectedStaffByOrder, setSelectedStaffByOrder] = useState({});
+  const [assigningOrderId, setAssigningOrderId] = useState(null);
+  const [refreshingStaff, setRefreshingStaff] = useState(false);
+
+  const isOrderActive = (status) => !["Completed", "Delivered", "Cancelled"].includes(status);
+
+  const loadOrders = async () => {
+    try {
+      const ordersResponse = await api.getOrders();
+      setOrders(ordersResponse.orders || []);
+    } catch (error) {
+      console.error("Failed to load orders:", error);
+    }
+  };
+
+  const loadStaff = async () => {
+    setRefreshingStaff(true);
+    try {
+      const staffResponse = await api.getStaffList({ onlineOnly: "true" });
+      setStaffMembers(staffResponse.staff || []);
+    } catch (error) {
+      console.error("Failed to load staff:", error);
+    } finally {
+      setRefreshingStaff(false);
+    }
+  };
 
   useEffect(() => {
-    const loadOrders = async () => {
+    const loadOrdersAndStaff = async () => {
       try {
-        const response = await api.getOrders();
-        setOrders(response.orders || []);
+        const [ordersResponse, staffResponse] = await Promise.all([
+          api.getOrders(),
+          api.getStaffList({ onlineOnly: "true" }),
+        ]);
+
+        setOrders(ordersResponse.orders || []);
+        setStaffMembers(staffResponse.staff || []);
       } catch (error) {
-        console.error("Failed to load orders:", error);
+        console.error("Failed to load orders/staff:", error);
       }
     };
 
-    loadOrders();
+    loadOrdersAndStaff();
   }, [setOrders]);
 
+  useEffect(() => {
+    const ordersIntervalId = setInterval(() => {
+      loadOrders();
+    }, 5000);
+
+    const intervalId = setInterval(() => {
+      loadStaff();
+    }, 20000);
+
+    return () => {
+      clearInterval(intervalId);
+      clearInterval(ordersIntervalId);
+    };
+  }, []);
+
+  const canAdvanceStatus = (order, nextStatus) => {
+    if (order.status === "Pending" && nextStatus === "Confirmed" && !order.staffAssigned?._id) {
+      return { allowed: false, message: "Assign this order to staff before accepting it." };
+    }
+
+    if (order.status === "Ready" && nextStatus === "Delivered" && !order.staffNotifiedAdmin) {
+      return { allowed: false, message: "Staff has not notified admin yet. Wait for staff notification before completion." };
+    }
+
+    return { allowed: true };
+  };
+
   const updateStatus = async (id, newStatus) => {
+    const orderToUpdate = orders.find((order) => (order._id || order.id) === id);
+    if (!orderToUpdate) return;
+
+    const statusCheck = canAdvanceStatus(orderToUpdate, newStatus);
+    if (!statusCheck.allowed) {
+      alert(statusCheck.message);
+      return;
+    }
+
     try {
       const response = await api.updateOrderStatus(id, newStatus);
       const updatedOrder = response.order;
@@ -37,6 +106,89 @@ function Orders() {
       console.error("Failed to update order status:", error);
       alert(error.message || "Failed to update order status");
     }
+  };
+
+  const cancelOrder = async (id) => {
+    const orderToCancel = orders.find((order) => (order._id || order.id) === id);
+    if (!orderToCancel) return;
+
+    const canCancel = ["Pending", "Confirmed", "Preparing"].includes(orderToCancel.status);
+    if (!canCancel) {
+      alert("This order can no longer be cancelled");
+      return;
+    }
+
+    const confirmed = window.confirm("Are you sure you want to cancel this order?");
+    if (!confirmed) return;
+
+    setCancellingOrderId(id);
+    try {
+      const response = await api.cancelOrder(id);
+      const updatedOrder = response.order;
+
+      setOrders((prevOrders) =>
+        prevOrders.map((order) => {
+          if ((order._id || order.id) === id) {
+            return { ...order, ...updatedOrder };
+          }
+          return order;
+        })
+      );
+    } catch (error) {
+      console.error("Failed to cancel order:", error);
+      alert(error.message || "Failed to cancel order");
+    } finally {
+      setCancellingOrderId(null);
+    }
+  };
+
+  const assignOrderToStaff = async (orderId) => {
+    const staffId = selectedStaffByOrder[orderId];
+    if (!staffId) {
+      alert("Please select a staff member first");
+      return;
+    }
+
+    setAssigningOrderId(orderId);
+    try {
+      const response = await api.assignStaffToOrder(orderId, staffId);
+      const updatedOrder = response.order;
+
+      setOrders((prevOrders) =>
+        prevOrders.map((order) => {
+          if ((order._id || order.id) === orderId) {
+            return { ...order, ...updatedOrder };
+          }
+          return order;
+        })
+      );
+
+      await loadStaff();
+    } catch (error) {
+      console.error("Failed to assign staff:", error);
+      alert(error.message || "Failed to assign staff");
+    } finally {
+      setAssigningOrderId(null);
+    }
+  };
+
+  const getStaffStatusClass = (status) => {
+    switch (status) {
+      case "Available":
+        return "bg-emerald-100 text-emerald-800";
+      case "Busy":
+        return "bg-amber-100 text-amber-800";
+      case "Offline":
+        return "bg-slate-100 text-slate-700";
+      default:
+        return "bg-gray-100 text-gray-700";
+    }
+  };
+
+  const getLoginClass = (isLoggedIn) => {
+    return isLoggedIn
+      ? "bg-green-100 text-green-800"
+      : "bg-gray-100 text-gray-700";
   };
 
   const getStatusColor = (status) => {
@@ -77,6 +229,12 @@ function Orders() {
     preparing: orders.filter(o => o.status === "Preparing").length,
     completed: orders.filter(o => o.status === "Delivered" || o.status === "Completed").length,
   };
+
+  const availableStaff = staffMembers.filter((member) => member.isLoggedIn && member.staffStatus === "Available");
+  const loggedInStaff = staffMembers;
+  const staffNotifications = orders
+    .filter((order) => order.staffNotifiedAdmin && order.status === "Ready")
+    .sort((a, b) => new Date(b.staffNotifiedAt || b.updatedAt || 0) - new Date(a.staffNotifiedAt || a.updatedAt || 0));
 
   return (
     <div className="space-y-6">
@@ -137,6 +295,100 @@ function Orders() {
             />
           </div>
         </div>
+      </div>
+
+      {/* Staff Status Overview */}
+      <div className="card-shadow p-6">
+        <div className="flex items-center justify-between mb-4">
+          <div>
+            <h2 className="text-lg font-semibold text-gray-900">Staff Status</h2>
+            <p className="text-sm text-gray-500">Assign only from logged-in staff. Admin cannot accept order before assignment.</p>
+          </div>
+          <div className="text-sm text-gray-600 text-right">
+            <div>Logged In Staff: <span className="font-semibold text-blue-700">{loggedInStaff.length}</span></div>
+            <div>Available: <span className="font-semibold text-emerald-700">{availableStaff.length}</span></div>
+          </div>
+        </div>
+
+        {staffMembers.length > 0 ? (
+          <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-3">
+            {staffMembers.map((member) => (
+              <div key={member._id} className="rounded-lg border border-gray-200 p-4 bg-white">
+                <div className="flex items-start justify-between gap-2">
+                  <div>
+                    <p className="text-sm font-semibold text-gray-900">
+                      {member.firstName || member.lastName
+                        ? `${member.firstName || ""} ${member.lastName || ""}`.trim()
+                        : member.username}
+                    </p>
+                    <p className="text-xs text-gray-500">@{member.username}</p>
+                  </div>
+                  <span className={`inline-flex px-2 py-1 rounded-full text-xs font-semibold ${getStaffStatusClass(member.staffStatus)}`}>
+                    {member.staffStatus || "Available"}
+                  </span>
+                </div>
+                <div className="mt-2">
+                  <span className={`inline-flex px-2 py-1 rounded-full text-xs font-semibold ${getLoginClass(member.isLoggedIn)}`}>
+                    {member.isLoggedIn ? "Logged In" : "Logged Out"}
+                  </span>
+                </div>
+                <p className="mt-3 text-xs text-gray-600">
+                  Active Orders: <span className="font-semibold text-gray-800">{member.activeOrderCount || 0}</span>
+                </p>
+              </div>
+            ))}
+          </div>
+        ) : (
+          <p className="text-sm text-gray-500">No active staff found.</p>
+        )}
+
+        <div className="mt-4 flex justify-end">
+          <button
+            type="button"
+            onClick={loadStaff}
+            disabled={refreshingStaff}
+            className="inline-flex items-center px-3 py-1.5 border border-gray-300 text-sm font-medium rounded-md text-gray-700 bg-white hover:bg-gray-50 disabled:opacity-70"
+          >
+            {refreshingStaff ? "Refreshing..." : "Refresh Staff"}
+          </button>
+        </div>
+      </div>
+
+      {/* Staff Notifications */}
+      <div className="card-shadow p-6 border-l-4 border-l-indigo-500">
+        <div className="flex items-center justify-between mb-4">
+          <div>
+            <h2 className="text-lg font-semibold text-gray-900">Staff Notifications</h2>
+            <p className="text-sm text-gray-500">Orders where staff has notified admin and are waiting for completion</p>
+          </div>
+          <span className="inline-flex items-center px-2.5 py-1 rounded-full text-xs font-semibold bg-indigo-100 text-indigo-800">
+            {staffNotifications.length} Notification{staffNotifications.length === 1 ? "" : "s"}
+          </span>
+        </div>
+
+        {staffNotifications.length === 0 ? (
+          <p className="text-sm text-gray-500">No new staff notifications.</p>
+        ) : (
+          <div className="space-y-2">
+            {staffNotifications.slice(0, 5).map((order) => (
+              <div key={order._id || order.id} className="flex flex-col md:flex-row md:items-center md:justify-between gap-2 rounded-lg border border-indigo-100 bg-indigo-50 px-3 py-2">
+                <div>
+                  <p className="text-sm font-semibold text-gray-900">
+                    Order #{order.orderNumber || order._id || order.id}
+                  </p>
+                  <p className="text-xs text-gray-600">
+                    Staff: {order.staffAssigned?.username || "Assigned Staff"} | Customer: {order.customerId?.username || "Guest"}
+                  </p>
+                </div>
+                <div className="text-xs text-gray-600">
+                  {order.staffNotifiedAt
+                    ? `Notified at ${new Date(order.staffNotifiedAt).toLocaleTimeString()}`
+                    : "Notified recently"}
+                </div>
+              </div>
+            ))}
+          </div>
+        )}
       </div>
 
       {/* Orders Table */}
@@ -209,16 +461,80 @@ function Orders() {
                       </span>
                     </td>
                     <td className="px-6 py-4 whitespace-nowrap text-sm font-medium">
-                      {!["Completed", "Delivered", "Cancelled"].includes(order.status) && (
-                        <button
-                          onClick={() => updateStatus(order._id || order.id, getNextStatus(order.status))}
-                          className="inline-flex items-center px-3 py-1 border border-transparent text-sm leading-4 font-medium rounded-md text-white bg-orange-500 hover:bg-orange-600 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-orange-500 transition-colors"
-                        >
-                          {order.status === "Pending" && "Confirm Order"}
-                          {order.status === "Confirmed" && "Start Preparing"}
-                          {order.status === "Preparing" && "Mark Ready"}
-                          {order.status === "Ready" && "Mark Delivered"}
-                        </button>
+                      {isOrderActive(order.status) && (
+                        <div className="flex flex-wrap items-center gap-2">
+                          {order.staffAssigned ? (
+                            <span className="inline-flex px-2.5 py-1 rounded-full text-xs font-semibold bg-blue-100 text-blue-800">
+                              Assigned: {order.staffAssigned.username}
+                            </span>
+                          ) : (
+                            <span className="inline-flex px-2.5 py-1 rounded-full text-xs font-semibold bg-rose-100 text-rose-800">
+                              Unassigned
+                            </span>
+                          )}
+
+                          {order.status === "Ready" && (
+                            <span className={`inline-flex px-2.5 py-1 rounded-full text-xs font-semibold ${order.staffNotifiedAdmin ? "bg-emerald-100 text-emerald-800" : "bg-amber-100 text-amber-800"}`}>
+                              {order.staffNotifiedAdmin ? "Staff Notified" : "Waiting Staff Notify"}
+                            </span>
+                          )}
+
+                          <button
+                            onClick={() => updateStatus(order._id || order.id, getNextStatus(order.status))}
+                            disabled={
+                              (order.status === "Pending" && !order.staffAssigned?._id) ||
+                              (order.status === "Ready" && !order.staffNotifiedAdmin)
+                            }
+                            className="inline-flex items-center px-3 py-1 border border-transparent text-sm leading-4 font-medium rounded-md text-white bg-orange-500 hover:bg-orange-600 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-orange-500 transition-colors disabled:opacity-60"
+                          >
+                            {order.status === "Pending" && "Confirm Order"}
+                            {order.status === "Confirmed" && "Start Preparing"}
+                            {order.status === "Preparing" && "Mark Ready"}
+                            {order.status === "Ready" && "Complete Order"}
+                          </button>
+
+                          {["Pending", "Confirmed", "Preparing"].includes(order.status) && (
+                            <button
+                              onClick={() => cancelOrder(order._id || order.id)}
+                              disabled={cancellingOrderId === (order._id || order.id)}
+                              className="inline-flex items-center px-3 py-1 border border-red-200 text-sm leading-4 font-medium rounded-md text-red-700 bg-red-50 hover:bg-red-100 disabled:opacity-70"
+                            >
+                              {cancellingOrderId === (order._id || order.id) ? "Cancelling..." : "Cancel"}
+                            </button>
+                          )}
+
+                          <select
+                            value={selectedStaffByOrder[order._id || order.id] || order.staffAssigned?._id || ""}
+                            onChange={(e) =>
+                              setSelectedStaffByOrder((prev) => ({
+                                ...prev,
+                                [order._id || order.id]: e.target.value,
+                              }))
+                            }
+                            className="border border-gray-300 rounded-md px-2 py-1 text-sm"
+                          >
+                            <option value="">Select Staff</option>
+                            {staffMembers
+                              .filter((member) => member.staffStatus !== "Offline")
+                              .map((member) => (
+                                <option key={member._id} value={member._id}>
+                                  {member.username} ({member.staffStatus || "Available"}, {member.activeOrderCount || 0} active)
+                                </option>
+                              ))}
+                          </select>
+
+                          <button
+                            onClick={() => assignOrderToStaff(order._id || order.id)}
+                            disabled={assigningOrderId === (order._id || order.id)}
+                            className="inline-flex items-center px-3 py-1 border border-blue-200 text-sm leading-4 font-medium rounded-md text-blue-700 bg-blue-50 hover:bg-blue-100 disabled:opacity-70"
+                          >
+                            {assigningOrderId === (order._id || order.id)
+                              ? "Assigning..."
+                              : order.staffAssigned
+                              ? "Reassign"
+                              : "Assign"}
+                          </button>
+                        </div>
                       )}
                       {["Completed", "Delivered"].includes(order.status) && (
                         <span className="text-green-600 flex items-center">

@@ -3,8 +3,12 @@ import MenuItem from '../models/MenuItem.js';
 import Order from '../models/Order.js';
 import { connectDB } from '../config/database.js';
 import dotenv from 'dotenv';
+import path from 'path';
+import { fileURLToPath } from 'url';
 
-dotenv.config();
+const __filename = fileURLToPath(import.meta.url);
+const __dirname = path.dirname(__filename);
+dotenv.config({ path: path.join(__dirname, '..', '.env') });
 
 const seedDatabase = async () => {
   try {
@@ -81,6 +85,7 @@ const seedDatabase = async () => {
         price: 250,
         category: "Main Course",
         emoji: "🍛",
+        image: "https://images.unsplash.com/photo-1631452180519-c014fe946bc7?auto=format&fit=crop&w=1200&q=80",
         isAvailable: true,
         preparationTime: 20,
         isVegetarian: true,
@@ -92,6 +97,7 @@ const seedDatabase = async () => {
         price: 40,
         category: "Bread",
         emoji: "🫓",
+        image: "https://images.unsplash.com/photo-1601050690597-df0568f70950?auto=format&fit=crop&w=1200&q=80",
         isAvailable: true,
         preparationTime: 5,
         isVegetarian: true,
@@ -103,6 +109,7 @@ const seedDatabase = async () => {
         price: 300,
         category: "Main Course",
         emoji: "🍗",
+        image: "https://images.unsplash.com/photo-1563379091339-03b21ab4a4f8?auto=format&fit=crop&w=1200&q=80",
         isAvailable: true,
         preparationTime: 25,
         isVegetarian: false,
@@ -114,6 +121,7 @@ const seedDatabase = async () => {
         price: 50,
         category: "Side Dish",
         emoji: "🥛",
+        image: "https://images.unsplash.com/photo-1617364509844-f7f3f3f7d4e8?auto=format&fit=crop&w=1200&q=80",
         isAvailable: true,
         preparationTime: 3,
         isVegetarian: true,
@@ -125,6 +133,7 @@ const seedDatabase = async () => {
         price: 180,
         category: "Thali",
         emoji: "🍽️",
+        image: "https://images.unsplash.com/photo-1683533697016-32d018f5e6bd?auto=format&fit=crop&w=1200&q=80",
         isAvailable: true,
         preparationTime: 20,
         isVegetarian: true,
@@ -136,6 +145,7 @@ const seedDatabase = async () => {
         price: 120,
         category: "South Indian",
         emoji: "🥞",
+        image: "https://images.unsplash.com/photo-1630409346824-4f0e7b080087?auto=format&fit=crop&w=1200&q=80",
         isAvailable: true,
         preparationTime: 15,
         isVegetarian: true,
@@ -147,6 +157,7 @@ const seedDatabase = async () => {
         price: 280,
         category: "Main Course",
         emoji: "🍗",
+        image: "https://images.unsplash.com/photo-1603894584373-5ac82b2ae398?auto=format&fit=crop&w=1200&q=80",
         isAvailable: true,
         preparationTime: 22,
         isVegetarian: false,
@@ -158,6 +169,7 @@ const seedDatabase = async () => {
         price: 80,
         category: "Dessert",
         emoji: "🍬",
+        image: "https://images.unsplash.com/photo-1605197161470-5f7f33f9f1f9?auto=format&fit=crop&w=1200&q=80",
         isAvailable: true,
         preparationTime: 5,
         isVegetarian: true,
@@ -169,6 +181,7 @@ const seedDatabase = async () => {
         price: 60,
         category: "Beverage",
         emoji: "🥤",
+        image: "https://images.unsplash.com/photo-1556881286-fc6915169721?auto=format&fit=crop&w=1200&q=80",
         isAvailable: true,
         preparationTime: 2,
         isVegetarian: true,
@@ -180,6 +193,7 @@ const seedDatabase = async () => {
         price: 220,
         category: "Starter",
         emoji: "🌶️",
+        image: "https://images.unsplash.com/photo-1626082927389-6cd097cdc6ec?auto=format&fit=crop&w=1200&q=80",
         isAvailable: true,
         preparationTime: 15,
         isVegetarian: true,
@@ -191,6 +205,7 @@ const seedDatabase = async () => {
         price: 320,
         category: "Starter",
         emoji: "🍗",
+        image: "https://images.unsplash.com/photo-1610057099443-fde8c4d50f91?auto=format&fit=crop&w=1200&q=80",
         isAvailable: true,
         preparationTime: 25,
         isVegetarian: false,
@@ -202,6 +217,7 @@ const seedDatabase = async () => {
         price: 150,
         category: "Main Course",
         emoji: "🍚",
+        image: "https://images.unsplash.com/photo-1603133872878-684f208fb84b?auto=format&fit=crop&w=1200&q=80",
         isAvailable: true,
         preparationTime: 12,
         isVegetarian: true,

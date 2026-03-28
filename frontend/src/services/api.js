@@ -123,6 +123,19 @@ class ApiService {
     });
   }
 
+  async assignStaffToOrder(id, staffId) {
+    return this.request(`/orders/${id}/assign-staff`, {
+      method: 'PATCH',
+      body: JSON.stringify({ staffId }),
+    });
+  }
+
+  async cancelOrder(id) {
+    return this.request(`/orders/${id}/cancel`, {
+      method: 'PATCH',
+    });
+  }
+
   async payOrderOnline(id) {
     return this.request(`/orders/${id}/pay-online`, {
       method: 'PATCH',
@@ -134,6 +147,11 @@ class ApiService {
     return this.request('/users');
   }
 
+  async getStaffList(params = {}) {
+    const queryString = new URLSearchParams(params).toString();
+    return this.request(`/users/role/staff${queryString ? `?${queryString}` : ''}`);
+  }
+
   async getUser(id) {
     return this.request(`/users/${id}`);
   }
@@ -142,6 +160,19 @@ class ApiService {
     return this.request(`/users/${id}`, {
       method: 'PUT',
       body: JSON.stringify(userData),
+    });
+  }
+
+  async updateMyStaffStatus(staffStatus) {
+    return this.request('/users/me/staff-status', {
+      method: 'PATCH',
+      body: JSON.stringify({ staffStatus }),
+    });
+  }
+
+  async notifyAdminOrderReady(id) {
+    return this.request(`/orders/${id}/notify-admin`, {
+      method: 'PATCH',
     });
   }
 
