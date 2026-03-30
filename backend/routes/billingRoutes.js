@@ -26,6 +26,8 @@ router.post('/', protectRoute, async (req, res) => {
     const tax = Math.round(subtotal * 0.05); // 5% tax
     const totalAmount = subtotal + tax + (deliveryCharges || 0) - (discount || 0);
 
+    const isOrderPaid = order.paymentStatus === 'Paid';
+
     const billing = new Billing({
       orderId,
       customerId: order.customerId,
@@ -34,8 +36,9 @@ router.post('/', protectRoute, async (req, res) => {
       discount: discount || 0,
       deliveryCharges: deliveryCharges || 0,
       totalAmount,
-      paymentMethod: paymentMethod || 'Cash',
-      paymentStatus: 'Pending'
+      paymentMethod: paymentMethod || order.paymentMethod || 'Cash',
+      paymentStatus: isOrderPaid ? 'Paid' : 'Pending',
+      paymentDate: isOrderPaid ? new Date() : undefined
     });
 
     await billing.save();

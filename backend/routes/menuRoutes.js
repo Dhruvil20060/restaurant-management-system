@@ -45,7 +45,7 @@ router.get('/:id', async (req, res) => {
 
 // Create menu item (Admin only)
 router.post('/', protectRoute, authorizeRole('admin'), async (req, res) => {
-  const { name, description, price, category, emoji, image, preparationTime, isVegetarian, spicyLevel } = req.body;
+  const { name, description, price, category, emoji, image, preparationTime, isAvailable, isVegetarian, spicyLevel } = req.body;
 
   if (!name || !description || !price || !category) {
     return res.status(400).json({ message: 'Please provide all required fields' });
@@ -60,6 +60,7 @@ router.post('/', protectRoute, authorizeRole('admin'), async (req, res) => {
       emoji,
       image,
       preparationTime,
+      isAvailable: isAvailable !== undefined ? isAvailable : true,
       isVegetarian: isVegetarian !== undefined ? isVegetarian : true,
       spicyLevel: spicyLevel || 1
     });
@@ -67,6 +68,10 @@ router.post('/', protectRoute, authorizeRole('admin'), async (req, res) => {
     await item.save();
     res.status(201).json({ message: 'Menu item created successfully', item });
   } catch (error) {
+    if (error.name === 'ValidationError') {
+      return res.status(400).json({ message: error.message });
+    }
+
     res.status(500).json({ message: error.message });
   }
 });

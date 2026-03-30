@@ -27,9 +27,7 @@ function CustomerMenu() {
           id: item.id || item._id,
         }));
 
-        if (normalizedMenuItems.length > 0) {
-          setMenuItems(normalizedMenuItems);
-        }
+        setMenuItems(normalizedMenuItems);
       } catch (error) {
         console.error("Failed to load menu items:", error);
       }

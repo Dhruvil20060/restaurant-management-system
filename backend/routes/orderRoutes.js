@@ -1,6 +1,7 @@
 import express from 'express';
 import mongoose from 'mongoose';
 import Order from '../models/Order.js';
+import Billing from '../models/Billing.js';
 import User from '../models/User.js';
 import { protectRoute, authorizeRole } from '../middleware/auth.js';
 
@@ -288,6 +289,17 @@ router.patch('/:id/pay-online', protectRoute, async (req, res) => {
     order.paymentMethod = 'UPI';
     order.paymentStatus = 'Paid';
     await order.save();
+
+    await Billing.findOneAndUpdate(
+      { orderId: order._id },
+      {
+        paymentStatus: 'Paid',
+        paymentMethod: 'UPI',
+        paymentDate: new Date(),
+        transactionId: `UPI-${Date.now()}-${String(order._id).slice(-6)}`
+      },
+      { new: true }
+    );
 
     res.status(200).json({ message: 'Payment completed successfully', order });
   } catch (error) {

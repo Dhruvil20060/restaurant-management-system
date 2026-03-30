@@ -1,5 +1,17 @@
-import { useContext, useState } from "react";
+import { useContext, useEffect, useState } from "react";
 import { OrderContext } from "../../App";
+import api from "../../services/api";
+
+const CATEGORY_OPTIONS = [
+  "Main Course",
+  "Bread",
+  "South Indian",
+  "Starter",
+  "Side Dish",
+  "Beverage",
+  "Dessert",
+  "Thali",
+];
 
 const resolveImage = (item) => {
   if (item.image && item.image.trim()) {
@@ -10,39 +22,9 @@ const resolveImage = (item) => {
 };
 
 function Menu() {
-  const { orders, setOrders, menuItems, setMenuItems } = useContext(OrderContext);
+  const { menuItems, setMenuItems } = useContext(OrderContext);
   const [editingId, setEditingId] = useState(null);
-const [editedItem, setEditedItem] = useState({
-  name: "",
-  description: "",
-  category: "",
-  image: "",
-  isAvailable: true,
-  price: "",
-});
-
-const startEdit = (item) => {
-  setEditingId(item.id);
-  setEditedItem({
-    name: item.name || "",
-    description: item.description || "",
-    category: item.category || "",
-    image: item.image || "",
-    isAvailable: item.isAvailable !== undefined ? item.isAvailable : true,
-    price: item.price || "",
-  });
-};
-const saveEdit = (id) => {
-  const updatedMenu = menuItems.map((item) =>
-    item.id === id ? { ...item, ...editedItem } : item
-  );
-
-  setMenuItems(updatedMenu);
-  setEditingId(null);
-};
-
-
-  const [newItem, setNewItem] = useState({
+  const [editedItem, setEditedItem] = useState({
     name: "",
     description: "",
     category: "",
@@ -50,44 +32,143 @@ const saveEdit = (id) => {
     isAvailable: true,
     price: "",
   });
+  const [menuError, setMenuError] = useState("");
+  const [isSubmitting, setIsSubmitting] = useState(false);
 
-  const addItem = () => {
-    if (!newItem.name || !newItem.description || !newItem.category || !newItem.price) return;
+  const isValidPrice = (value) => {
+    const parsed = Number(value);
+    return Number.isFinite(parsed) && parsed >= 0;
+  };
 
-    const newMenuItem = {
-      id: Date.now(),
-      name: newItem.name,
-      description: newItem.description,
-      category: newItem.category,
-      image: newItem.image,
-      isAvailable: newItem.isAvailable,
-      price: Number(newItem.price),
+  const isNonEmpty = (value) => String(value || "").trim().length > 0;
+
+  useEffect(() => {
+    const loadMenuItems = async () => {
+      try {
+        const response = await api.getMenuItems();
+        const normalizedMenuItems = (response.items || []).map((item) => ({
+          ...item,
+          id: item.id || item._id,
+        }));
+        setMenuItems(normalizedMenuItems);
+      } catch (error) {
+        setMenuError(error.message || "Failed to load menu items");
+      }
     };
 
-    setMenuItems([...menuItems, newMenuItem]);
+    loadMenuItems();
+  }, [setMenuItems]);
 
-    setNewItem({
-      name: "",
-      description: "",
-      category: "",
-      image: "",
-      isAvailable: true,
-      price: "",
+  const startEdit = (item) => {
+    setEditingId(item.id);
+    setEditedItem({
+      name: item.name || "",
+      description: item.description || "",
+      category: item.category || "",
+      image: item.image || "",
+      isAvailable: item.isAvailable !== undefined ? item.isAvailable : true,
+      price: item.price || "",
     });
   };
 
-const deleteItem = (id) => {
-  const confirmDelete = window.confirm("Are you sure?");
-  if (!confirmDelete) return;
+  const saveEdit = async (id) => {
+    if (!isNonEmpty(editedItem.name) || !isNonEmpty(editedItem.description) || !isNonEmpty(editedItem.category) || !isValidPrice(editedItem.price)) {
+      setMenuError("Please enter valid name, description, category and price.");
+      return;
+    }
 
-  const updatedMenu = menuItems.filter((item) => item.id !== id);
-  setMenuItems(updatedMenu);
-};
+    try {
+      setMenuError("");
+      setIsSubmitting(true);
+      const payload = {
+        ...editedItem,
+        price: Number(editedItem.price),
+      };
+      const response = await api.updateMenuItem(id, payload);
+      const updatedItem = {
+        ...response.item,
+        id: response.item?.id || response.item?._id || id,
+      };
+
+      setMenuItems((prevItems) => prevItems.map((item) => (item.id === id ? updatedItem : item)));
+      setEditingId(null);
+    } catch (error) {
+      setMenuError(error.message || "Failed to update item");
+    } finally {
+      setIsSubmitting(false);
+    }
+  };
+
+
+  const [newItem, setNewItem] = useState({
+    name: "",
+    description: "",
+    category: CATEGORY_OPTIONS[0],
+    image: "",
+    isAvailable: true,
+    price: "",
+  });
+
+  const addItem = async () => {
+    if (!isNonEmpty(newItem.name) || !isNonEmpty(newItem.description) || !isNonEmpty(newItem.category) || !isValidPrice(newItem.price)) {
+      setMenuError("Please enter valid name, description, category and price.");
+      return;
+    }
+
+    try {
+      setMenuError("");
+      setIsSubmitting(true);
+      const response = await api.createMenuItem({
+        ...newItem,
+        price: Number(newItem.price),
+      });
+
+      const createdItem = {
+        ...response.item,
+        id: response.item?.id || response.item?._id,
+      };
+
+      setMenuItems((prevItems) => [...prevItems, createdItem]);
+
+      setNewItem({
+        name: "",
+        description: "",
+        category: CATEGORY_OPTIONS[0],
+        image: "",
+        isAvailable: true,
+        price: "",
+      });
+    } catch (error) {
+      setMenuError(error.message || "Failed to create item");
+    } finally {
+      setIsSubmitting(false);
+    }
+  };
+
+  const deleteItem = async (id) => {
+    const confirmDelete = window.confirm("Are you sure?");
+    if (!confirmDelete) return;
+
+    try {
+      setMenuError("");
+      setIsSubmitting(true);
+      await api.deleteMenuItem(id);
+      setMenuItems((prevItems) => prevItems.filter((item) => item.id !== id));
+    } catch (error) {
+      setMenuError(error.message || "Failed to delete item");
+    } finally {
+      setIsSubmitting(false);
+    }
+  };
 
 
   return (
     <div>
       <h1>Menu Management</h1>
+
+      {menuError && (
+        <p style={{ color: "#dc3545", marginTop: "12px" }}>{menuError}</p>
+      )}
 
 <div
   style={{
@@ -122,15 +203,19 @@ const deleteItem = (id) => {
     style={inputStyle}
   />
 
-  <input
-    type="text"
-    placeholder="Category"
+  <select
     value={newItem.category}
     onChange={(e) =>
       setNewItem({ ...newItem, category: e.target.value })
     }
     style={inputStyle}
-  />
+  >
+    {CATEGORY_OPTIONS.map((category) => (
+      <option key={category} value={category}>
+        {category}
+      </option>
+    ))}
+  </select>
 
   <input
     type="text"
@@ -163,8 +248,8 @@ const deleteItem = (id) => {
     Available
   </label>
 
-  <button onClick={addItem} style={buttonStyle}>
-    + Add Item
+  <button onClick={addItem} style={buttonStyle} disabled={isSubmitting}>
+    {isSubmitting ? "Saving..." : "+ Add Item"}
   </button>
 </div>
 
@@ -243,12 +328,18 @@ const deleteItem = (id) => {
 
     <td style={cellStyle}>
       {editingId === item.id ? (
-        <input
+        <select
           value={editedItem.category}
           onChange={(e) =>
             setEditedItem({ ...editedItem, category: e.target.value })
           }
-        />
+        >
+          {CATEGORY_OPTIONS.map((category) => (
+            <option key={category} value={category}>
+              {category}
+            </option>
+          ))}
+        </select>
       ) : (
         item.category || "-"
       )}
@@ -286,7 +377,7 @@ const deleteItem = (id) => {
 
     <td style={cellStyle}>
       {editingId === item.id ? (
-        <button onClick={() => saveEdit(item.id)}>Save</button>
+        <button onClick={() => saveEdit(item.id)} disabled={isSubmitting}>Save</button>
       ) : (
         <>
 <button onClick={() => startEdit(item)} style={editBtn}>
@@ -296,6 +387,7 @@ const deleteItem = (id) => {
 <button
   onClick={() => deleteItem(item.id)}
   style={deleteBtn}
+  disabled={isSubmitting}
 >
   Delete
 </button>
