@@ -1,9 +1,8 @@
 import express from 'express';
 import cors from 'cors';
 import dotenv from 'dotenv';
-import path from 'path';
-import { fileURLToPath } from 'url';
 import 'express-async-errors';
+
 import { connectDB } from './config/database.js';
 import authRoutes from './routes/authRoutes.js';
 import menuRoutes from './routes/menuRoutes.js';
@@ -12,24 +11,32 @@ import userRoutes from './routes/userRoutes.js';
 import billingRoutes from './routes/billingRoutes.js';
 import { errorHandler } from './middleware/errorHandler.js';
 
-const __filename = fileURLToPath(import.meta.url);
-const __dirname = path.dirname(__filename);
-dotenv.config({ path: path.join(__dirname, '.env') });
+// Load environment variables
+dotenv.config();
 
 const app = express();
+
+// Debug (optional - remove later)
+console.log("MONGO URI:", process.env.MONGODB_URI ? "Loaded ✅" : "Missing ❌");
+console.log("JWT SECRET:", process.env.JWT_SECRET ? "Loaded ✅" : "Missing ❌");
 
 // Connect to MongoDB
 connectDB();
 
 // Middleware
 app.use(cors({
-  origin: process.env.CORS_ORIGIN || 'http://localhost:5173',
+  origin: process.env.CORS_ORIGIN || '*', // allow all for now (fix later)
   credentials: true
 }));
+
 app.use(express.json());
 app.use(express.urlencoded({ extended: true }));
 
-// Health check
+// Health check route
+app.get('/', (req, res) => {
+  res.send("API is running 🚀");
+});
+
 app.get('/api/health', (req, res) => {
   res.status(200).json({ status: 'Server is running' });
 });
@@ -46,11 +53,12 @@ app.use((req, res) => {
   res.status(404).json({ message: 'Route not found' });
 });
 
-// Error handling middleware
+// Error handler
 app.use(errorHandler);
 
+// PORT (Render provides this automatically)
 const PORT = process.env.PORT || 5000;
 
 app.listen(PORT, () => {
-  console.log(`Server is running on port ${PORT}`);
+  console.log(`🚀 Server running on port ${PORT}`);
 });
