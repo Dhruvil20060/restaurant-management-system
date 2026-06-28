@@ -1,8 +1,6 @@
 <div align="center">
 <img src="https://capsule-render.vercel.app/api?type=waving&color=0:22D3EE,100:3B82F6&height=200&section=header&text=restaurant-management-system&fontSize=50&fontColor=fff&animation=twinkling"/>
 
-# restaurant-management-system
-### Project description goes here
 
 [![Stars](https://img.shields.io/github/stars/Dhruvil20060/restaurant-management-system?style=for-the-badge&color=7C3AED)](https://github.com/Dhruvil20060/restaurant-management-system/stargazers)
 [![Forks](https://img.shields.io/github/forks/Dhruvil20060/restaurant-management-system?style=for-the-badge&color=58A6FF)](https://github.com/Dhruvil20060/restaurant-management-system/forks)
@@ -13,7 +11,7 @@
 ---
 
 ## 📖 Overview
-Detailed description of the project, its purpose, and what it solves.
+The Restaurant Management System is a web-based application designed to simplify day-to-day restaurant operations. It provides an easy-to-use interface for managing menus, customer orders, table reservations, and billing in one place. The system helps reduce manual effort, improves operational efficiency, and offers a smooth experience for both restaurant staff and customers.
 
 ---
 
